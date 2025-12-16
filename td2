@@ -1,0 +1,108 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- PARAMÈTRES GLOBAUX ---
+F0 = 1000.0  # Fréquence du signal (Hz) 
+A = 5.0      # Amplitude du signal 
+Fs = 8000.0  # Fréquence d'échantillonnage (Hz) 
+F_nyquist = Fs / 2
+
+# =================================================================
+# 1.a. Spectre du signal original
+# =================================================================
+
+def plot_analog_spectrum(F0, A):
+    """Génère le spectre bilatéral du signal analogique."""
+    
+    # 1. Calcul des composantes
+    # Le spectre bilatéral d'un cosinus A cos(2*pi*F0*t) a deux raies à +/- F0
+    # avec une amplitude de A/2.
+    frequencies = np.array([-F0, F0])
+    amplitudes = np.array([A / 2, A / 2])
+
+    # 2. Création du tracé
+    print("\n--- 1.a. Spectre du signal analogique original (Bilatéral) ---")
+    print(f"Raies à: +-{F0} Hz. Amplitude (A/2): {A / 2}")
+    
+    plt.figure(figsize=(8, 4))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="b-", markerfmt="bo")
+    
+    plt.title('1.a. Spectre Bilatéral du Signal Analogique $x(t)$')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude ($A/2$)')
+    plt.xlim(-F0 * 1.5, F0 * 1.5)
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, A / 2 + 0.5)
+    plt.show()
+
+# Exécution de la question 1.a
+plot_analog_spectrum(F0, A)
+# 
+
+
+# =================================================================
+# 1.b. Spectre du signal échantillonné (0 à 20 kHz)
+# =================================================================
+
+def calculate_sampled_spectrum(F0, A, Fs, F_max_plot):
+    """Calcule les fréquences images et leurs amplitudes pour le signal échantillonné."""
+    
+    # 1. Détermination de la plage d'images
+    # Nous devons calculer les images jusqu'à F_max_plot = 20000 Hz.
+    # Les images se forment à |k*Fs +/- F0|.
+    k_max = int(np.ceil((F_max_plot + F0) / Fs))
+    
+    freqs = []
+    amps = []
+    amp_bilateral = A / 2
+
+    # 2. Calcul des images (pour k = 0, 1, 2, ... k_max)
+    for k in range(k_max + 1):
+        # Image positive: k*Fs + F0
+        f_pos = k * Fs + F0
+        # Image négative (repliée): |k*Fs - F0|
+        f_neg = abs(k * Fs - F0)
+        
+        # Ajout des images dans la limite positive [0, 20 kHz]
+        if f_pos <= F_max_plot:
+            freqs.append(f_pos)
+            amps.append(amp_bilateral)
+            
+        # Assurer que f_neg est dans la plage et n'est pas déjà ajouté (comme f_pos)
+        if f_neg <= F_max_plot and f_neg != f_pos and f_neg != 0:
+            freqs.append(f_neg)
+            amps.append(amp_bilateral)
+
+    # Convertir en tableaux pour le tri et le tracé
+    unique_freqs, indices = np.unique(np.array(freqs), return_index=True)
+    unique_amps = np.array(amps)[indices]
+    
+    return unique_freqs, unique_amps
+
+
+def plot_sampled_spectrum(F0, A, Fs):
+    """Génère le spectre unilatéral du signal échantillonné de 0 à 20 kHz."""
+    
+    F_max_plot = 20000.0  # Limite de tracé (Hz) [cite: 5]
+    
+    frequencies, amplitudes = calculate_sampled_spectrum(F0, A, Fs, F_max_plot)
+    
+    print("\n--- 1.b. Spectre du signal échantillonné (Unilatéral, 0 à 20 kHz) ---")
+    print(f"Fréquences images (kHz) : {frequencies / 1000}")
+    print(f"Amplitude Bilatérale : {amplitudes}")
+    
+    # 3. Création du tracé
+    plt.figure(figsize=(10, 5))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="r-", markerfmt="ro")
+    
+    plt.title(f'1.b. Spectre Échantillonné (Fs={Fs/1000} kHz) [0 - 20 kHz]')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (A/2)')
+    plt.xlim(0, F_max_plot + 1000)
+    plt.xticks(np.arange(0, F_max_plot + 1000, 2000))
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, A / 2 + 0.5)
+    plt.show()
+
+# Exécution de la question 1.b
+plot_sampled_spectrum(F0, A, Fs)
