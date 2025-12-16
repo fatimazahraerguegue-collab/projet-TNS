@@ -1,0 +1,330 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- PARAMÈTRES GLOBAUX ---
+Fs = 8000.0  # Fréquence d'échantillonnage (Hz)
+F_max_plot = 40000.0 # Limite de tracé (Hz)
+Fc_recover = 6000.0  # Fréquence de coupure du LPF (Hz)
+
+# Composantes du signal original: (Fréquence, Amplitude Unilatérale)
+COMPONENTS = [
+    (0.0, 1.0),   # F_DC, A_DC
+    (2000.0, 1.0), # F1, A1
+    (4000.0, 2.0), # F2, A2 (Sur Nyquist)
+    (6000.0, 3.0)  # F3, A3 (Aliasing)
+]
+
+# =================================================================
+# Fonctions de calcul des spectres échantillonnés (Utilisées par b et c)
+# =================================================================
+
+def calculate_sampled_spectrum(Fs, F_max_plot, components, spectrum_type='unilateral'):
+    """
+    Calcule le spectre échantillonné (bilatéral ou unilatéral) en gérant l'aliasing.
+    
+    Retourne: (frequencies, amplitudes_bilateral)
+    """
+    
+    F_max_sig = max(c[0] for c in components)
+    k_max = int(np.ceil((F_max_plot + F_max_sig) / Fs))
+    
+    # Utilisation d'un dictionnaire pour gérer la superposition (aliasing) des amplitudes
+    sampled_spectrum = {}  # {Fréquence: Somme_Amplitudes_Bilatérales}
+
+    for k in range(-k_max, k_max + 1):
+        for Fx, Ax in components:
+            
+            # Cas DC (Fx=0)
+            if Fx == 0:
+                f = k * Fs
+                if abs(f) <= F_max_plot:
+                    # Amplitude bilatérale: A_DC à F=0, A_DC/2 aux autres F=k*Fs (k!=0)
+                    amplitude = Ax if f == 0 else Ax / 2
+                    sampled_spectrum[f] = sampled_spectrum.get(f, 0.0) + amplitude
+                continue
+
+            # Cas Fréquences non-DC (Fx != 0) : Images à k*Fs +/- Fx
+            for sign in [1, -1]:
+                f = k * Fs + sign * Fx
+                
+                if abs(f) <= F_max_plot and f != 0:
+                    amplitude = Ax / 2
+                    # L'aliasing est géré ici: si une raie se superpose à une autre, l'amplitude est additionnée
+                    sampled_spectrum[f] = sampled_spectrum.get(f, 0.0) + amplitude
+
+    # Préparer les données pour le tracé
+    if spectrum_type == 'unilateral':
+        # Pour le tracé unilatéral, on ne garde que les fréquences >= 0
+        unilateral_spectrum = {}
+        for f, a in sampled_spectrum.items():
+            if f >= 0:
+                # Si F=0, on prend l'amplitude telle quelle (A_DC)
+                # Si F=Fs/2 (4000 Hz), l'amplitude 'a' contient la somme des deux raies bilatérales
+                # On ne doit pas diviser par 2 les raies non nulles, car l'aliasing peut avoir été géré par sommation
+                unilateral_spectrum[f] = a 
+        
+        frequencies = np.array(sorted(unilateral_spectrum.keys()))
+        amplitudes = np.array([unilateral_spectrum[f] for f in frequencies])
+        
+    else: # bilateral
+        frequencies = np.array(sorted(sampled_spectrum.keys()))
+        amplitudes = np.array([sampled_spectrum[f] for f in frequencies])
+        
+    return frequencies, amplitudes
+
+# =================================================================
+# 4.a. Spectre du signal original
+# =================================================================
+
+def plot_original_spectrum(components):
+    """Génère le spectre bilatéral du signal analogique original."""
+    
+    # Fréquences positives et négatives
+    frequencies = []
+    amplitudes = []
+    
+    for Fx, Ax in components:
+        # Cas DC (F=0)
+        if Fx == 0:
+            frequencies.append(0.0)
+            amplitudes.append(Ax) # Amplitude bilatérale = A_DC
+        # Cas sinusoïdal (F>0)
+        else:
+            frequencies.extend([-Fx, Fx])
+            amplitudes.extend([Ax / 2, Ax / 2]) # Amplitude bilatérale = A/2
+    
+    # Tri par fréquence
+    indices = np.argsort(frequencies)
+    frequencies = np.array(frequencies)[indices]
+    amplitudes = np.array(amplitudes)[indices]
+    
+    print("\n--- 4.a. Spectre Analogique Original (Bilatéral) ---")
+    print("Fréquences (Hz) et Amplitude Bilatérale:")
+    for f, a in zip(frequencies, amplitudes):
+        print(f"F: {f:7.1f} Hz, A: {a}")
+    
+    plt.figure(figsize=(10, 5))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="b-", markerfmt="bo")
+    
+    plt.title('4.a. Spectre Bilatéral du Signal Analogique Original')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (Bilatérale)')
+    plt.xlim(-8000, 8000)
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, max(amplitudes) + 0.5)
+    plt.show()
+
+# Exécution de la question 4.a
+plot_original_spectrum(COMPONENTS)
+# 
+
+
+# =================================================================
+# 4.b. Spectre unilatéral du signal échantillonné (0 à 40 kHz)
+# =================================================================
+
+def plot_unilateral_sampled_spectrum(Fs, F_max_plot, components):
+    """Génère le tracé du spectre échantillonné unilatéral."""
+    
+    frequencies, amplitudes = calculate_sampled_spectrum(Fs, F_max_plot, components, spectrum_type='unilateral')
+    
+    print("\n--- 4.b. Spectre Échantillonné Unilatéral (0 à 40 kHz) ---")
+    print("Fréquences images (Hz) et Amplitude Bilatérale Totale:")
+    for f, a in zip(frequencies, amplitudes):
+        print(f"F: {f:7.1f} Hz, A: {a}")
+    
+    plt.figure(figsize=(12, 5))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="r-", markerfmt="ro")
+    
+    plt.title(f'4.b. Spectre Échantillonné Unilatéral (Fs={Fs/1000} kHz) [0 - 40 kHz]')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (Somme A/2)')
+    plt.xlim(-500, F_max_plot + 1000)
+    plt.xticks(np.arange(0, F_max_plot + 1000, 4000))
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, max(amplitudes) + 0.5)
+    plt.show()
+
+# Exécution de la question 4.b
+plot_unilateral_sampled_spectrum(Fs, F_max_plot, COMPONENTS)
+# 
+
+
+# =================================================================
+# 4.c. Spectre bilatéral du signal échantillonné (jusqu'à 40 kHz)
+# =================================================================
+
+def plot_bilateral_sampled_spectrum(Fs, F_max_plot, components):
+    """Génère le tracé du spectre échantillonné bilatéral."""
+    
+    frequencies, amplitudes = calculate_sampled_spectrum(Fs, F_max_plot, components, spectrum_type='bilateral')
+    
+    print("\n--- 4.c. Spectre Échantillonné Bilatéral (jusqu'à 40 kHz) ---")
+    print("Fréquences (Hz) et Amplitude Bilatérale Totale:")
+    for f, a in zip(frequencies, amplitudes):
+        print(f"F: {f:7.1f} Hz, A: {a}")
+    
+    plt.figure(figsize=(12, 5))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="m-", markerfmt="mo")
+    
+    plt.title(f'4.c. Spectre Échantillonné Bilatéral (Fs={Fs/1000} kHz) [-40 kHz - 40 kHz]')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (A/2)')
+    plt.xlim(-F_max_plot - 1000, F_max_plot + 1000)
+    plt.xticks(np.arange(-F_max_plot, F_max_plot + 1, 8000))
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, max(amplitudes) + 0.5)
+    plt.show()
+
+# Exécution de la question 4.c
+plot_bilateral_sampled_spectrum(Fs, F_max_plot, COMPONENTS)
+# 
+
+
+# =================================================================
+# 4.d. Conclusion sur b et c.
+# =================================================================
+
+def conclusion_q4d():
+    """Analyse les spectres unilatéraux et bilatéraux."""
+    
+    print("\n--- 4.d. Conclusion sur b et c ---")
+    print("1. Répétition spectrale (Images):")
+    print("   Le spectre échantillonné est une répétition du spectre analogique autour de chaque multiple de Fs (8 kHz, 16 kHz, 24 kHz, etc.).")
+    
+    print("\n2. Aliasing (Repliement):")
+    print("   La composante la plus haute F3 = 6000 Hz (> F_Nyquist = 4000 Hz) cause un repliement sur F_alias = 2000 Hz.")
+    
+    print("\n3. Superposition d'Amplitudes (Aliasing):")
+    print("   - À F = 2000 Hz: L'amplitude bilatérale est la somme de l'amplitude de F1 (1.0/2 = 0.5) et de F3 aliasée (3.0/2 = 1.5), soit 2.0.")
+    print("   - À F = 4000 Hz (F_Nyquist): L'amplitude bilatérale est la somme de F2 (2.0/2 = 1.0) et de son image repliée (-F2+Fs ou F2-Fs) (1.0), soit 2.0. (Ceci est la convention pour les raies à Fs/2).")
+    
+    print("\n4. Symétrie (Bilatéral):")
+    print("   Le spectre bilatéral est symétrique par rapport à l'axe F=0 (fréquences positives et négatives).")
+
+conclusion_q4d()
+
+
+# =================================================================
+# 4.e. Déterminer les fréquences d'aliasing.
+# =================================================================
+
+def determine_aliasing_q4e(Fs, components):
+    """Détermine les fréquences originales qui causent l'aliasing et où elles se replient."""
+    
+    F_nyquist = Fs / 2
+    aliased_freqs = []
+    
+    print("\n--- 4.e. Détermination des fréquences d'aliasing ---")
+    
+    for Fx, Ax in components:
+        if Fx > F_nyquist:
+            F_alias = abs(Fs - Fx)
+            aliased_freqs.append((Fx, F_alias, Ax))
+            
+    if not aliased_freqs:
+        print("Aucune fréquence d'aliasing n'a été trouvée (Fmax <= F_Nyquist).")
+        return
+
+    for Fx, F_alias, Ax in aliased_freqs:
+        print(f"La fréquence originale Fx = {Fx} Hz (A={Ax}) est > F_Nyquist={F_nyquist} Hz.")
+        print(f"Elle est repliée (aliasée) sur F_alias = {F_alias} Hz.")
+
+determine_aliasing_q4e(Fs, COMPONENTS)
+
+
+# =================================================================
+# 4.f. Spectre du signal récupéré (LPFi, Fc=6 kHz)
+# =================================================================
+
+def plot_recovered_spectrum_q4f(Fs, Fc_recover, components):
+    """Simule et trace le spectre du signal récupéré par le LPF (Fc=6 kHz)."""
+    
+    F_max_plot_sampled = 40000.0
+    # Calculer les amplitudes bilatérales pour toutes les fréquences échantillonnées
+    frequencies_sampled, amplitudes_bilateral = calculate_sampled_spectrum(Fs, F_max_plot_sampled, components, spectrum_type='bilateral')
+    
+    recovered_spectrum = {} # {Fréquence: Amplitude_Unilatérale_Reconstruite}
+
+    # 1. Application du LPF (Ne garde que les fréquences |f| <= Fc)
+    print("\n--- 4.f. Spectre du signal récupéré (LPFi Fc=6 kHz) ---")
+    print(f"LPF de coupure à Fc={Fc_recover/1000} kHz. Le signal récupéré sera distordu.")
+    
+    for f, a_bilat in zip(frequencies_sampled, amplitudes_bilateral):
+        if abs(f) <= Fc_recover:
+            f_pos = abs(f)
+            
+            # Pour un spectre analogique unilatéral reconstruit (amplitude A du cosinus):
+            if f_pos == 0.0:
+                # Composante DC: A_DC (déjà 'a_bilat' dans le dictionnaire)
+                recovered_spectrum[0.0] = a_bilat
+            else:
+                # Composantes sinusoïdales: L'amplitude unilatérale = 2 * Somme(Amplitudes Bilatérales)
+                # Attention: dans le dict 'recovered_spectrum', on va stocker la somme des raies bilatérales
+                # à f_pos et -f_pos.
+                recovered_spectrum[f_pos] = recovered_spectrum.get(f_pos, 0.0) + a_bilat
+
+    # Finalisation des amplitudes unilatérales (A du cosinus)
+    frequencies = np.array(sorted(recovered_spectrum.keys()))
+    amplitudes_unilat = []
+    
+    for f in frequencies:
+        a_sum_bilat = recovered_spectrum[f]
+        if f == 0.0:
+            amplitudes_unilat.append(a_sum_bilat) # DC est A_DC
+        else:
+            # Pour retrouver l'amplitude A du cosinus, on prend la somme des raies bilatérales (positives et négatives)
+            # et on divise par 2 si on veut la raie unilatérale (A).
+            amplitudes_unilat.append(a_sum_bilat / 2.0)
+    
+    amplitudes_unilat = np.array(amplitudes_unilat)
+
+    # Affichage des amplitudes réelles du cosinus récupéré
+    print("Fréquences Récupérées (Hz) et Amplitude Unilatérale (A du cosinus):")
+    for f, a in zip(frequencies, amplitudes_unilat):
+        print(f"F: {f:7.1f} Hz, A: {a}")
+    
+    # Le signal récupéré est: y(t) = 1 + 4 cos(2π 2000t) + 2 cos(2π 4000t) + 1 cos(2π 6000t)
+    
+    # 2. Création du tracé
+    plt.figure(figsize=(10, 5))
+    plt.stem(frequencies, amplitudes_unilat, basefmt="k-", linefmt="g-", markerfmt="go")
+    
+    plt.title(f'4.f. Spectre du Signal Récupéré (LPFi $F_c = {Fc_recover/1000}$ kHz)')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (A)')
+    plt.xlim(0, Fc_recover + 1000)
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, max(amplitudes_unilat) + 0.5)
+    plt.show()
+
+# Exécution de la question 4.f
+plot_recovered_spectrum_q4f(Fs, Fc_recover, COMPONENTS)
+
+
+# =================================================================
+# 4.g. Proposer un filtre pour récupérer le signal original.
+# =================================================================
+
+def propose_filter_q4g():
+    """Propose une solution pour récupérer le signal original sans distorsion."""
+    
+    print("\n--- 4.g. Proposition d'un filtre pour récupérer le signal original ---")
+    
+    print("Le signal original ne peut être récupéré sans distorsion car l'aliasing a mélangé les composantes F1 (2 kHz) et F3 (6 kHz). Le mal est fait à l'échantillonnage.")
+    
+    print("\n**Solution pour l'échantillonnage (pré-filtrage) :**")
+    print("Pour que Fs=8 kHz soit suffisant, la fréquence maximale du signal doit être Fmax <= F_Nyquist = 4 kHz.")
+    print("Puisque Fmax du signal est 6 kHz, il est impératif d'utiliser un filtre anti-repliement (anti-aliasing) analogique avant l'échantillonnage.")
+    
+    print("\n**Filtre Anti-Aliasing Proposé (avant l'échantillonnage) :**")
+    print("Un filtre passe-bas dont la fréquence de coupure Fc_anti-aliasing élimine la composante 6 kHz :")
+    print("  - $F_{c\text{ anti-aliasing}} < F_{Nyquist} = 4 \text{ kHz}$")
+    print("  - Idéalement, $\mathbf{F_{c\text{ anti-aliasing}} = 4 \text{ kHz}}$ pour conserver 2 kHz et 4 kHz (avec atténuation rapide).")
+    
+    print("\n**Proposition alternative (Augmenter Fs) :**")
+    print("Si l'on ne veut pas filtrer la composante 6 kHz, il faut augmenter la fréquence d'échantillonnage pour satisfaire le critère de Nyquist (Fs > 2 * Fmax).")
+    print("  - $F_s > 2 \times 6 \text{ kHz} = 12 \text{ kHz}$")
+    print("  - Une fréquence minimale suggérée serait par exemple $\mathbf{F_s = 14 \text{ kHz}}$.")
+
+propose_filter_q4g()
