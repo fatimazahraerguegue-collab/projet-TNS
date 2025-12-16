@@ -1,0 +1,128 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- PARAMÈTRES GLOBAUX ---
+F1 = 2000.0  # Fréquence 1 (Hz)
+A1 = 5.0     # Amplitude 1
+F2 = 3000.0  # Fréquence 2 (Hz)
+A2 = 3.0     # Amplitude 2
+Fs = 8000.0  # Fréquence d'échantillonnage (Hz)
+F_nyquist = Fs / 2
+Fc = 4000.0  # Fréquence de coupure du LPF (Hz)
+
+# =================================================================
+# 2.a. Spectre du signal échantillonné (jusqu'à 20 kHz)
+# =================================================================
+
+def calculate_sampled_spectrum(F1, A1, F2, A2, Fs, F_max_plot):
+    """Calcule les fréquences images et leurs amplitudes pour le signal échantillonné."""
+    
+    # Fréquences et Amplitudes bilatérales des composantes originales
+    components = [
+        (F1, A1 / 2),
+        (F2, A2 / 2)
+    ]
+    
+    # Calcul de la limite de k pour inclure toutes les images jusqu'à 20 kHz
+    F_max_sig = max(F1, F2)
+    k_max = int(np.ceil((F_max_plot + F_max_sig) / Fs))
+    
+    sampled_spectrum = {}  # {Fréquence: Somme_Amplitudes_Bilatérales}
+
+    # Calcul des images pour chaque composante (k*Fs +/- Fx)
+    for k in range(k_max + 1):
+        for Fx, Ax_bilat in components:
+            
+            # Fréquence positive: k*Fs + Fx
+            f_pos = k * Fs + Fx
+            # Fréquence négative (repliée): |k*Fs - Fx|
+            f_neg = abs(k * Fs - Fx)
+            
+            # Ajout des images dans la limite positive [0, 20 kHz]
+            for f in [f_pos, f_neg]:
+                if f <= F_max_plot and f != 0:
+                    # Additionner les amplitudes au cas où deux images coïncident (aliasing ou superposition)
+                    sampled_spectrum[f] = sampled_spectrum.get(f, 0.0) + Ax_bilat
+    
+    # Préparer les données pour le tracé (trié)
+    frequencies = np.array(sorted(sampled_spectrum.keys()))
+    amplitudes = np.array([sampled_spectrum[f] for f in frequencies])
+    
+    return frequencies, amplitudes
+
+
+def plot_sampled_spectrum_q2a(F1, A1, F2, A2, Fs):
+    """Génère le tracé du spectre échantillonné."""
+    
+    F_max_plot = 20000.0  # Limite de tracé (Hz)
+    
+    frequencies, amplitudes = calculate_sampled_spectrum(F1, A1, F2, A2, Fs, F_max_plot)
+    
+    print("\n--- 2.a. Spectre du signal échantillonné (Unilatéral, 0 à 20 kHz) ---")
+    print("Fréquences images (Hz) et Amplitude Bilatérale (A/2):")
+    for f, a in zip(frequencies, amplitudes):
+        print(f"F: {f:7.1f} Hz, A: {a}")
+    
+    # 3. Création du tracé
+    plt.figure(figsize=(10, 5))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="r-", markerfmt="ro")
+    
+    plt.title(f'2.a. Spectre Échantillonné (Fs={Fs/1000} kHz) [0 - 20 kHz]')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (A/2)')
+    plt.xlim(0, F_max_plot + 1000)
+    plt.xticks(np.arange(0, F_max_plot + 1000, 2000))
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, max(amplitudes) + 0.5)
+    plt.show()
+
+# Exécution de la question 2.a
+plot_sampled_spectrum_q2a(F1, A1, F2, A2, Fs)
+# 
+
+
+# =================================================================
+# 2.b. Spectre du signal récupéré (LPFi, Fc=4 kHz)
+# =================================================================
+
+def plot_recovered_spectrum_q2b(F1, A1, F2, A2, Fs, Fc):
+    """Simule et trace le spectre du signal récupéré par le LPF."""
+    
+    F_max_plot_sampled = 20000.0  # On utilise le spectre échantillonné calculé précédemment
+    frequencies_sampled, amplitudes_sampled = calculate_sampled_spectrum(F1, A1, F2, A2, Fs, F_max_plot_sampled)
+    
+    recovered_spectrum = {} # {Fréquence: Amplitude_Unilatérale}
+
+    # 1. Application du LPF (Ne garde que les fréquences < Fc)
+    print("\n--- 2.b. Spectre du signal récupéré (LPFi Fc=4 kHz) ---")
+    print(f"LPF de coupure à Fc={Fc/1000} kHz. Fréquences dans la bande de Nyquist conservées.")
+    
+    for f, a_bilat in zip(frequencies_sampled, amplitudes_sampled):
+        if f < Fc:
+            # Pour la reconstruction (spectre analogique), l'amplitude unilatérale = 2 * amplitude bilatérale
+            A_unilat = 2 * a_bilat
+            recovered_spectrum[f] = A_unilat
+
+    # Préparer les données pour le tracé (trié)
+    frequencies = np.array(sorted(recovered_spectrum.keys()))
+    amplitudes = np.array([recovered_spectrum[f] for f in frequencies])
+    
+    print("Fréquences Récupérées (Hz) et Amplitude Unilatérale (Originale):")
+    for f, a in zip(frequencies, amplitudes):
+        print(f"F: {f:7.1f} Hz, A: {a}")
+    
+    # 2. Création du tracé
+    plt.figure(figsize=(8, 4))
+    plt.stem(frequencies, amplitudes, basefmt="k-", linefmt="g-", markerfmt="go")
+    
+    plt.title(f'2.b. Spectre du Signal Récupéré (LPFi $F_c = {Fc/1000}$ kHz)')
+    plt.xlabel('Fréquence (Hz)')
+    plt.ylabel('Amplitude (A)')
+    plt.xlim(0, Fc + 1000)
+    plt.grid(True, linestyle='--')
+    plt.ylim(0, max(amplitudes) + 1.0)
+    plt.show()
+
+# Exécution de la question 2.b
+plot_recovered_spectrum_q2b(F1, A1, F2, A2, Fs, Fc)
+#
